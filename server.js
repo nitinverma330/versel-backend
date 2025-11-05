@@ -7,8 +7,30 @@ require('dotenv').config();
 
 const app = express();
 
-// Middleware
-app.use(cors());
+// ✅ Enhanced CORS configuration for production
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://versel-frontend-tau.vercel.app'
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = `The CORS policy for this site does not allow access from ${origin}`;
+      console.log('❌ CORS Blocked:', origin);
+      return callback(new Error(msg), false);
+    }
+    console.log('✅ CORS Allowed:', origin);
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
+
 app.use(express.json());
 
 // ✅ Root route to fix "Cannot GET /"
@@ -273,6 +295,18 @@ app.get('/api/test', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'healthy',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ✅ Connection test endpoint
+app.get('/api/connection-test', (req, res) => {
+  res.json({
+    status: 'success',
+    message: '✅ Backend is connected and responding!',
+    backend: 'https://versel-backend-henna.vercel.app',
+    frontend: 'https://versel-frontend-tau.vercel.app',
     database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
     timestamp: new Date().toISOString()
   });
