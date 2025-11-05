@@ -11,6 +11,22 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ✅ Root route to fix "Cannot GET /"
+app.get('/', (req, res) => {
+  res.json({ 
+    message: '✅ QR Attendance Backend is running!',
+    status: 'active',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      auth: '/api/login, /api/register',
+      attendance: '/api/attendance, /api/sessions',
+      students: '/api/students, /api/profile',
+      export: '/api/export/:session'
+    }
+  });
+});
+
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/qrattendance';
 mongoose.connect(MONGODB_URI)
@@ -29,7 +45,7 @@ const userSchema = new mongoose.Schema({
   role: { type: String, enum: ['teacher', 'student'], required: true },
   name: { type: String, required: true },
   email: { type: String },
-  rollNumber: { type: String }, // Added rollNumber field for students
+  rollNumber: { type: String },
   course: { type: String },
   section: { type: String },
   createdAt: { type: Date, default: Date.now }
@@ -206,8 +222,8 @@ const initializeDefaultUsers = async () => {
           name: student.name,
           email: `${student.student_id.toLowerCase()}@school.edu`,
           rollNumber: student.student_id,
-          course: 'BCA', // Default course, can be updated
-          section: 'A'   // Default section, can be updated
+          course: 'BCA',
+          section: 'A'
         });
         await studentUser.save();
         console.log(`✅ Student profile created: ${student.name} (${student.student_id})`);
@@ -251,6 +267,15 @@ const requireTeacher = (req, res, next) => {
 // Test API
 app.get('/api/test', (req, res) => {
   res.json({ message: '✅ Backend is working!' });
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'healthy',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Register new user
@@ -642,11 +667,37 @@ app.get('/api/student-stats/:rollNumber', authenticateToken, async (req, res) =>
   }
 });
 
+// 404 handler for undefined routes
+app.use('*', (req, res) => {
+  res.status(404).json({ 
+    status: 'error', 
+    message: 'Route not found',
+    path: req.originalUrl 
+  });
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('❌ Server Error:', err);
+  res.status(500).json({ 
+    status: 'error', 
+    message: 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { error: err.message })
+  });
+});
+
 // Initialize default users when server starts
 initializeDefaultUsers();
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📊 MongoDB URI: ${MONGODB_URI}`);
-});
+// ✅ Export the app for Vercel
+module.exports = app;
+
+// ✅ Start server only in local development
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
+    console.log(`📊 MongoDB URI: ${process.env.MONGODB_URI || 'mongodb://localhost:27017/qrattendance'}`);
+    console.log(`🔐 JWT Secret: ${process.env.JWT_SECRET ? 'Set' : 'Using default'}`);
+  });
+}
