@@ -247,8 +247,16 @@ const allStudents = [
 ];
 
 // ✅ TEMPORARY IN-MEMORY STORAGE (Works without MongoDB)
-const temporaryUsers = [
-  {
+let temporaryUsers = [];
+let temporarySessions = [];
+let temporaryAttendance = [];
+
+// Initialize temporary storage with demo data
+const initializeTemporaryStorage = () => {
+  console.log('💾 Initializing temporary in-memory storage...');
+  
+  // Add admin user
+  temporaryUsers.push({
     username: 'admin',
     password: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/Lewd.fvWrIVyKTqOS', // admin123
     role: 'teacher',
@@ -257,32 +265,10 @@ const temporaryUsers = [
     rollNumber: 'ADMIN001',
     course: 'ALL',
     section: 'A'
-  },
-  {
-    username: 'BC2023003',
-    password: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/Lewd.fvWrIVyKTqOS', // student123
-    role: 'student',
-    name: 'AYUSH AGARWAL',
-    email: 'bc2023003@school.edu',
-    rollNumber: 'BC2023003',
-    course: 'BCA',
-    section: 'A'
-  },
-  {
-    username: 'BC2023339',
-    password: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/Lewd.fvWrIVyKTqOS', // student123
-    role: 'student',
-    name: 'NITIN VERMA',
-    email: 'bc2023339@school.edu',
-    rollNumber: 'BC2023339',
-    course: 'BCA',
-    section: 'A'
-  }
-];
+  });
 
-// Create more temporary student users
-allStudents.forEach(student => {
-  if (!temporaryUsers.find(u => u.username === student.student_id)) {
+  // Add all students to temporary storage
+  allStudents.forEach(student => {
     temporaryUsers.push({
       username: student.student_id,
       password: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/Lewd.fvWrIVyKTqOS', // student123
@@ -293,56 +279,35 @@ allStudents.forEach(student => {
       course: 'BCA',
       section: 'A'
     });
-  }
-});
+  });
 
-// Initialize default users (only if MongoDB is connected)
-const initializeDefaultUsers = async () => {
-  try {
-    if (mongoose.connection.readyState !== 1) {
-      console.log('⚠️ MongoDB not connected, skipping user initialization');
-      return;
-    }
+  // Add some demo sessions
+  const demoSession = {
+    sessionId: 'DEMO-SESSION-001',
+    course: 'BCA',
+    section: 'A',
+    subject: 'MERN-Fullstack',
+    faculty: 'Dr. Smith',
+    date: new Date().toISOString().split('T')[0],
+    time: '10:00 AM - 11:00 AM',
+    note: 'Demo session for testing',
+    createdBy: 'admin',
+    createdAt: new Date()
+  };
+  temporarySessions.push(demoSession);
 
-    // Check if admin user exists
-    const adminExists = await User.findOne({ username: 'admin' });
-    if (!adminExists) {
-      const hashedPassword = await bcrypt.hash('admin123', 12);
-      const admin = new User({
-        username: 'admin',
-        password: hashedPassword,
-        role: 'teacher',
-        name: 'Administrator',
-        email: 'admin@school.edu'
-      });
-      await admin.save();
-      console.log('✅ Default admin user created');
-    }
+  console.log(`✅ Temporary storage initialized with:
+    - ${temporaryUsers.length} users (1 teacher, ${temporaryUsers.length - 1} students)
+    - ${temporarySessions.length} demo sessions
+    - ${temporaryAttendance.length} attendance records`);
+};
 
-    // Create all student profiles with default password
-    for (const student of allStudents) {
-      const studentExists = await User.findOne({ username: student.student_id });
-      if (!studentExists) {
-        const hashedPassword = await bcrypt.hash('student123', 12);
-        const studentUser = new User({
-          username: student.student_id,
-          password: hashedPassword,
-          role: 'student',
-          name: student.name,
-          email: `${student.student_id.toLowerCase()}@school.edu`,
-          rollNumber: student.student_id,
-          course: 'BCA',
-          section: 'A'
-        });
-        await studentUser.save();
-        console.log(`✅ Student profile created: ${student.name} (${student.student_id})`);
-      }
-    }
-    
-    console.log('✅ All student profiles initialized');
-  } catch (error) {
-    console.error('❌ Error initializing default users:', error);
-  }
+// Initialize temporary storage on server start
+initializeTemporaryStorage();
+
+// Check if MongoDB is connected
+const isMongoConnected = () => {
+  return mongoose.connection.readyState === 1;
 };
 
 // Middleware to verify JWT token
@@ -377,7 +342,8 @@ const requireTeacher = (req, res, next) => {
 app.get('/api/test', (req, res) => {
   res.json({ 
     message: '✅ Backend is working!',
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected (using temp storage)'
+    database: isMongoConnected() ? 'connected' : 'disconnected (using temp storage)',
+    storage: isMongoConnected() ? 'MongoDB' : 'In-Memory'
   });
 });
 
@@ -385,9 +351,11 @@ app.get('/api/test', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'healthy',
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    database: isMongoConnected() ? 'connected' : 'disconnected',
+    storage: isMongoConnected() ? 'MongoDB' : 'In-Memory',
     timestamp: new Date().toISOString(),
-    usingTemporaryStorage: mongoose.connection.readyState !== 1
+    users: isMongoConnected() ? 'From MongoDB' : `From Memory (${temporaryUsers.length})`,
+    sessions: isMongoConnected() ? 'From MongoDB' : `From Memory (${temporarySessions.length})`
   });
 });
 
@@ -398,7 +366,8 @@ app.get('/api/connection-test', (req, res) => {
     message: '✅ Backend is connected and responding!',
     backend: 'https://versel-backend-henna.vercel.app',
     frontend: 'https://versel-frontend-tau.vercel.app',
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected (using temp storage)',
+    database: isMongoConnected() ? 'connected' : 'disconnected (using temp storage)',
+    storage: isMongoConnected() ? 'MongoDB' : 'In-Memory',
     timestamp: new Date().toISOString()
   });
 });
@@ -465,278 +434,33 @@ app.post('/api/temp-login', async (req, res) => {
   }
 });
 
-// Register new user
-app.post('/api/register', async (req, res) => {
-  try {
-    const { username, password, role, name, email, rollNumber, course, section } = req.body;
-    
-    // If MongoDB is not connected, use temporary storage
-    if (mongoose.connection.readyState !== 1) {
-      const existingUser = temporaryUsers.find(u => u.username === username);
-      if (existingUser) {
-        return res.status(400).json({ status: 'error', message: 'Username already exists' });
-      }
-      
-      temporaryUsers.push({
-        username,
-        password: await bcrypt.hash(password, 12),
-        role,
-        name,
-        email,
-        rollNumber,
-        course,
-        section
-      });
-      
-      return res.status(201).json({ 
-        status: 'success', 
-        message: 'User registered successfully (temporary storage)' 
-      });
-    }
-    
-    const existingUser = await User.findOne({ username });
-    if (existingUser) {
-      return res.status(400).json({ status: 'error', message: 'Username already exists' });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 12);
-
-    const user = new User({
-      username,
-      password: hashedPassword,
-      role,
-      name,
-      email,
-      rollNumber,
-      course,
-      section
-    });
-
-    await user.save();
-
-    res.status(201).json({ 
-      status: 'success', 
-      message: 'User registered successfully' 
-    });
-  } catch (error) {
-    console.error('❌ Registration error:', error);
-    res.status(400).json({ 
-      status: 'error', 
-      message: error.message 
-    });
-  }
-});
-
-// Login user (uses MongoDB if available, otherwise temporary)
-app.post('/api/login', async (req, res) => {
-  try {
-    const { username, password } = req.body;
-
-    // If MongoDB is not connected, use temporary login
-    if (mongoose.connection.readyState !== 1) {
-      console.log('⚠️ MongoDB not connected, using temporary login');
-      const user = temporaryUsers.find(u => u.username === username);
-      
-      if (!user) {
-        return res.status(400).json({ status: 'error', message: 'Invalid credentials' });
-      }
-
-      const isPasswordValid = password === 'student123' || password === 'admin123';
-      
-      if (!isPasswordValid) {
-        return res.status(400).json({ status: 'error', message: 'Invalid credentials' });
-      }
-
-      const token = jwt.sign(
-        { 
-          userId: user.username, 
-          username: user.username, 
-          role: user.role,
-          name: user.name 
-        }, 
-        JWT_SECRET, 
-        { expiresIn: '24h' }
-      );
-
-      return res.json({
-        status: 'success',
-        message: 'Login successful (temporary)',
-        data: {
-          token,
-          user: {
-            id: user.username,
-            username: user.username,
-            role: user.role,
-            name: user.name,
-            email: user.email,
-            rollNumber: user.rollNumber,
-            course: user.course,
-            section: user.section
-          }
-        }
-      });
-    }
-
-    // MongoDB is connected - use database
-    let user = await User.findOne({ username });
-
-    // If user not found, check if it's a student from the list
-    if (!user) {
-      const student = allStudents.find(s => s.student_id === username);
-      if (student) {
-        // Auto-create student profile
-        const hashedPassword = await bcrypt.hash('student123', 12);
-        user = new User({
-          username: student.student_id,
-          password: hashedPassword,
-          role: 'student',
-          name: student.name,
-          email: `${student.student_id.toLowerCase()}@school.edu`,
-          rollNumber: student.student_id,
-          course: 'BCA',
-          section: 'A'
-        });
-        await user.save();
-        console.log(`✅ Auto-created student profile: ${student.name} (${student.student_id})`);
-      } else {
-        return res.status(400).json({ status: 'error', message: 'Invalid credentials' });
-      }
-    }
-
-    // Check password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(400).json({ status: 'error', message: 'Invalid credentials' });
-    }
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { 
-        userId: user._id, 
-        username: user.username, 
-        role: user.role,
-        name: user.name 
-      }, 
-      JWT_SECRET, 
-      { expiresIn: '24h' }
-    );
-
-    res.json({
-      status: 'success',
-      message: 'Login successful',
-      data: {
-        token,
-        user: {
-          id: user._id,
-          username: user.username,
-          role: user.role,
-          name: user.name,
-          email: user.email,
-          rollNumber: user.rollNumber,
-          course: user.course,
-          section: user.section
-        }
-      }
-    });
-  } catch (error) {
-    console.error('❌ Login error:', error);
-    res.status(400).json({ 
-      status: 'error', 
-      message: error.message 
-    });
-  }
-});
-
-// Get current user profile
-app.get('/api/profile', authenticateToken, async (req, res) => {
-  try {
-    // If MongoDB is not connected, use temporary storage
-    if (mongoose.connection.readyState !== 1) {
-      const user = temporaryUsers.find(u => u.username === req.user.username);
-      if (!user) {
-        return res.status(404).json({ status: 'error', message: 'User not found' });
-      }
-      return res.json({ status: 'success', data: user });
-    }
-
-    const user = await User.findById(req.user.userId).select('-password');
-    res.json({ status: 'success', data: user });
-  } catch (error) {
-    console.error('❌ Profile fetch error:', error);
-    res.status(400).json({ status: 'error', message: error.message });
-  }
-});
-
-// Get all students (teacher only)
-app.get('/api/students', authenticateToken, requireTeacher, async (req, res) => {
-  try {
-    // If MongoDB is not connected, use temporary storage
-    if (mongoose.connection.readyState !== 1) {
-      const students = temporaryUsers.filter(u => u.role === 'student');
-      return res.json({ status: 'success', data: students });
-    }
-
-    const students = await User.find({ role: 'student' }).select('-password').sort({ name: 1 });
-    res.json({ status: 'success', data: students });
-  } catch (error) {
-    console.error('❌ Error fetching students:', error);
-    res.status(400).json({ status: 'error', message: error.message });
-  }
-});
-
-// Save attendance
-app.post('/api/attendance', authenticateToken, async (req, res) => {
-  try {
-    console.log('📥 Received attendance data:', req.body);
-    
-    // If MongoDB is not connected, return success but don't save
-    if (mongoose.connection.readyState !== 1) {
-      console.log('⚠️ MongoDB not connected, attendance not saved');
-      return res.status(201).json({ 
-        status: 'success', 
-        message: 'Attendance marked successfully (not saved - no database)',
-        data: req.body 
-      });
-    }
-
-    const attendance = new Attendance(req.body);
-    await attendance.save();
-    
-    console.log('✅ Attendance saved to database');
-    res.status(201).json({ 
-      status: 'success', 
-      message: 'Attendance marked successfully',
-      data: attendance 
-    });
-  } catch (error) {
-    console.error('❌ Error saving attendance:', error);
-    res.status(400).json({ 
-      status: 'error', 
-      message: error.message 
-    });
-  }
-});
-
 // Get all sessions
 app.get('/api/sessions', authenticateToken, async (req, res) => {
   try {
-    // If MongoDB is not connected, return empty array
-    if (mongoose.connection.readyState !== 1) {
-      return res.json({ status: 'success', data: [] });
-    }
-
-    let sessions;
-    if (req.user.role === 'teacher') {
-      sessions = await Session.find({ createdBy: req.user.username }).sort({ createdAt: -1 });
-    } else {
-      sessions = await Session.find().sort({ createdAt: -1 });
-    }
+    console.log('📚 Fetching sessions...');
     
-    console.log(`📚 Found ${sessions.length} sessions`);
-    res.json({ 
-      status: 'success', 
-      data: sessions 
-    });
+    if (isMongoConnected()) {
+      // Use MongoDB
+      let sessions;
+      if (req.user.role === 'teacher') {
+        sessions = await Session.find({ createdBy: req.user.username }).sort({ createdAt: -1 });
+      } else {
+        sessions = await Session.find().sort({ createdAt: -1 });
+      }
+      
+      console.log(`✅ Found ${sessions.length} sessions in MongoDB`);
+      return res.json({ status: 'success', data: sessions });
+    } else {
+      // Use temporary storage
+      let sessions = [...temporarySessions];
+      if (req.user.role === 'teacher') {
+        sessions = sessions.filter(session => session.createdBy === req.user.username);
+      }
+      sessions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      
+      console.log(`✅ Found ${sessions.length} sessions in temporary storage`);
+      return res.json({ status: 'success', data: sessions });
+    }
   } catch (error) {
     console.error('❌ Error fetching sessions:', error);
     res.status(400).json({ 
@@ -751,32 +475,258 @@ app.post('/api/sessions', authenticateToken, requireTeacher, async (req, res) =>
   try {
     console.log('🆕 Creating new session:', req.body);
     
-    // If MongoDB is not connected, return success but don't save
-    if (mongoose.connection.readyState !== 1) {
-      console.log('⚠️ MongoDB not connected, session not saved');
-      return res.status(201).json({ 
-        status: 'success', 
-        message: 'Session created successfully (not saved - no database)',
-        data: req.body 
-      });
-    }
-
     const sessionData = {
       ...req.body,
-      createdBy: req.user.username
+      createdBy: req.user.username,
+      createdAt: new Date()
     };
-    
-    const session = new Session(sessionData);
-    await session.save();
-    
-    console.log('✅ Session created successfully');
-    res.status(201).json({ 
-      status: 'success', 
-      message: 'Session created successfully',
-      data: session 
-    });
+
+    if (isMongoConnected()) {
+      // Save to MongoDB
+      const session = new Session(sessionData);
+      await session.save();
+      console.log('✅ Session saved to MongoDB');
+      return res.status(201).json({ 
+        status: 'success', 
+        message: 'Session created successfully',
+        data: session 
+      });
+    } else {
+      // Save to temporary storage
+      sessionData._id = `temp_${Date.now()}`;
+      temporarySessions.push(sessionData);
+      console.log('✅ Session saved to temporary storage');
+      return res.status(201).json({ 
+        status: 'success', 
+        message: 'Session created successfully (temporary storage)',
+        data: sessionData 
+      });
+    }
   } catch (error) {
     console.error('❌ Error creating session:', error);
+    res.status(400).json({ 
+      status: 'error', 
+      message: error.message 
+    });
+  }
+});
+
+// Save attendance
+app.post('/api/attendance', authenticateToken, async (req, res) => {
+  try {
+    console.log('📥 Received attendance data:', req.body);
+    
+    const attendanceData = {
+      ...req.body,
+      timestamp: new Date()
+    };
+
+    if (isMongoConnected()) {
+      // Save to MongoDB
+      const attendance = new Attendance(attendanceData);
+      await attendance.save();
+      console.log('✅ Attendance saved to MongoDB');
+      return res.status(201).json({ 
+        status: 'success', 
+        message: 'Attendance marked successfully',
+        data: attendance 
+      });
+    } else {
+      // Save to temporary storage
+      attendanceData._id = `temp_att_${Date.now()}`;
+      temporaryAttendance.push(attendanceData);
+      console.log('✅ Attendance saved to temporary storage');
+      return res.status(201).json({ 
+        status: 'success', 
+        message: 'Attendance marked successfully (temporary storage)',
+        data: attendanceData 
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error saving attendance:', error);
+    res.status(400).json({ 
+      status: 'error', 
+      message: error.message 
+    });
+  }
+});
+
+// Get attendance by session
+app.get('/api/attendance/:session', authenticateToken, async (req, res) => {
+  try {
+    const sessionId = req.params.session;
+    console.log('📋 Fetching attendance for session:', sessionId);
+    
+    if (isMongoConnected()) {
+      // Get from MongoDB
+      let query = { session: sessionId };
+      if (req.user.role === 'student') {
+        query.roll = req.user.username;
+      }
+      
+      const attendance = await Attendance.find(query).sort({ timestamp: -1 });
+      console.log(`✅ Found ${attendance.length} records in MongoDB for session ${sessionId}`);
+      return res.json({ status: 'success', data: attendance });
+    } else {
+      // Get from temporary storage
+      let attendance = temporaryAttendance.filter(record => record.session === sessionId);
+      if (req.user.role === 'student') {
+        attendance = attendance.filter(record => record.roll === req.user.username);
+      }
+      attendance.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      
+      console.log(`✅ Found ${attendance.length} records in temporary storage for session ${sessionId}`);
+      return res.json({ status: 'success', data: attendance });
+    }
+  } catch (error) {
+    console.error('❌ Error fetching attendance:', error);
+    res.status(400).json({ 
+      status: 'error', 
+      message: error.message 
+    });
+  }
+});
+
+// Get all students (teacher only)
+app.get('/api/students', authenticateToken, requireTeacher, async (req, res) => {
+  try {
+    console.log('👨‍🎓 Fetching students list...');
+    
+    if (isMongoConnected()) {
+      // Get from MongoDB
+      const students = await User.find({ role: 'student' }).select('-password').sort({ name: 1 });
+      console.log(`✅ Found ${students.length} students in MongoDB`);
+      return res.json({ status: 'success', data: students });
+    } else {
+      // Get from temporary storage
+      const students = temporaryUsers
+        .filter(user => user.role === 'student')
+        .map(({ password, ...user }) => user) // Remove password
+        .sort((a, b) => a.name.localeCompare(b.name));
+      
+      console.log(`✅ Found ${students.length} students in temporary storage`);
+      return res.json({ status: 'success', data: students });
+    }
+  } catch (error) {
+    console.error('❌ Error fetching students:', error);
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
+// Get student statistics
+app.get('/api/student-stats/:rollNumber', authenticateToken, async (req, res) => {
+  try {
+    const { rollNumber } = req.params;
+    
+    // Verify access - students can only see their own stats
+    if (req.user.role === 'student' && req.user.username !== rollNumber) {
+      return res.status(403).json({ status: 'error', message: 'Access denied' });
+    }
+    
+    console.log(`📊 Fetching stats for student: ${rollNumber}`);
+    
+    let studentRecords = [];
+    let totalSessions = 0;
+
+    if (isMongoConnected()) {
+      // Get from MongoDB
+      studentRecords = await Attendance.find({ roll: rollNumber }).sort({ timestamp: -1 });
+      totalSessions = await Session.countDocuments();
+    } else {
+      // Get from temporary storage
+      studentRecords = temporaryAttendance.filter(record => record.roll === rollNumber);
+      studentRecords.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      totalSessions = temporarySessions.length;
+    }
+
+    const stats = {
+      totalLectures: totalSessions,
+      attendedLectures: studentRecords.length,
+      attendancePercentage: totalSessions > 0 ? ((studentRecords.length / totalSessions) * 100).toFixed(1) : 0,
+      recentAttendance: studentRecords.slice(0, 10),
+      allRecords: studentRecords
+    };
+    
+    console.log('📈 Student stats:', stats);
+    res.json({ status: 'success', data: stats });
+  } catch (error) {
+    console.error('❌ Error fetching student stats:', error);
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
+// Delete session and its attendance
+app.delete('/api/sessions/:sessionId', authenticateToken, requireTeacher, async (req, res) => {
+  try {
+    const sessionId = req.params.sessionId;
+    console.log('🗑️ Deleting session:', sessionId);
+    
+    if (isMongoConnected()) {
+      // Delete from MongoDB
+      const session = await Session.findOne({ sessionId: sessionId, createdBy: req.user.username });
+      if (!session) {
+        return res.status(404).json({ 
+          status: 'error', 
+          message: 'Session not found or access denied' 
+        });
+      }
+      
+      await Session.deleteOne({ sessionId: sessionId });
+      await Attendance.deleteMany({ session: sessionId });
+    } else {
+      // Delete from temporary storage
+      const sessionIndex = temporarySessions.findIndex(s => s.sessionId === sessionId && s.createdBy === req.user.username);
+      if (sessionIndex === -1) {
+        return res.status(404).json({ 
+          status: 'error', 
+          message: 'Session not found or access denied' 
+        });
+      }
+      
+      temporarySessions.splice(sessionIndex, 1);
+      temporaryAttendance = temporaryAttendance.filter(record => record.session !== sessionId);
+    }
+    
+    console.log('✅ Session deleted successfully');
+    res.json({ 
+      status: 'success', 
+      message: 'Session and all attendance records deleted successfully' 
+    });
+  } catch (error) {
+    console.error('❌ Error deleting session:', error);
+    res.status(400).json({ 
+      status: 'error', 
+      message: error.message 
+    });
+  }
+});
+
+// Export attendance as CSV
+app.get('/api/export/:session', authenticateToken, requireTeacher, async (req, res) => {
+  try {
+    const sessionId = req.params.session;
+    console.log('📊 Exporting attendance for session:', sessionId);
+    
+    let attendance = [];
+    
+    if (isMongoConnected()) {
+      attendance = await Attendance.find({ session: sessionId });
+    } else {
+      attendance = temporaryAttendance.filter(record => record.session === sessionId);
+    }
+    
+    let csv = 'Name,Roll Number,Session,Course,Section,Subject,Faculty,Date,Time,Scan Time\n';
+    attendance.forEach(record => {
+      csv += `"${record.name}","${record.roll}","${record.session}","${record.course}","${record.section}","${record.subject}","${record.faculty}","${record.date}","${record.time}","${record.scanTime}"\n`;
+    });
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=attendance_${sessionId}.csv`);
+    res.send(csv);
+    
+    console.log(`✅ Exported ${attendance.length} records as CSV`);
+  } catch (error) {
+    console.error('❌ Error exporting attendance:', error);
     res.status(400).json({ 
       status: 'error', 
       message: error.message 
@@ -787,22 +737,27 @@ app.post('/api/sessions', authenticateToken, requireTeacher, async (req, res) =>
 // Get all attendance records
 app.get('/api/attendance', authenticateToken, async (req, res) => {
   try {
-    // If MongoDB is not connected, return empty array
-    if (mongoose.connection.readyState !== 1) {
-      return res.json({ status: 'success', data: [] });
-    }
-
-    let query = {};
-    if (req.user.role === 'student') {
-      query.roll = req.user.username;
-    }
+    console.log('📋 Fetching all attendance records...');
     
-    const allAttendance = await Attendance.find(query).sort({ timestamp: -1 });
-    console.log(`📋 Total attendance records in DB: ${allAttendance.length}`);
-    res.json({ 
-      status: 'success', 
-      data: allAttendance 
-    });
+    if (isMongoConnected()) {
+      let query = {};
+      if (req.user.role === 'student') {
+        query.roll = req.user.username;
+      }
+      
+      const allAttendance = await Attendance.find(query).sort({ timestamp: -1 });
+      console.log(`✅ Found ${allAttendance.length} total records in MongoDB`);
+      return res.json({ status: 'success', data: allAttendance });
+    } else {
+      let allAttendance = [...temporaryAttendance];
+      if (req.user.role === 'student') {
+        allAttendance = allAttendance.filter(record => record.roll === req.user.username);
+      }
+      allAttendance.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      
+      console.log(`✅ Found ${allAttendance.length} total records in temporary storage`);
+      return res.json({ status: 'success', data: allAttendance });
+    }
   } catch (error) {
     console.error('❌ Error fetching all attendance:', error);
     res.status(400).json({ 
@@ -831,18 +786,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Initialize default users when server starts (only if MongoDB is connected)
-setTimeout(() => {
-  if (mongoose.connection.readyState === 1) {
-    initializeDefaultUsers();
-  } else {
-    console.log('ℹ️ Using temporary in-memory storage for users');
-    console.log('👨‍🏫 Teacher: admin / admin123');
-    console.log('👨‍🎓 Student: BC2023003 / student123');
-    console.log('👨‍🎓 Student: BC2023339 / student123');
-  }
-}, 2000);
-
 // ✅ Export the app for Vercel
 module.exports = app;
 
@@ -851,8 +794,16 @@ if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`📊 MongoDB Status: ${mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'}`);
+    console.log(`📊 MongoDB Status: ${isMongoConnected() ? 'Connected' : 'Disconnected'}`);
+    console.log(`💾 Storage: ${isMongoConnected() ? 'MongoDB' : 'In-Memory (Temporary)'}`);
     console.log(`🔐 JWT Secret: ${process.env.JWT_SECRET ? 'Set' : 'Using default'}`);
     console.log(`🌐 CORS Enabled for: ${allowedOrigins.join(', ')}`);
+    
+    if (!isMongoConnected()) {
+      console.log('📝 Demo Credentials:');
+      console.log('   👨‍🏫 Teacher: admin / admin123');
+      console.log('   👨‍🎓 Student: BC2023003 / student123');
+      console.log('   👨‍🎓 Student: BC2023339 / student123');
+    }
   });
 }
