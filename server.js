@@ -51,7 +51,7 @@ app.get('/', (req, res) => {
 });
 
 // ✅ IMPROVED MongoDB Connection with timeout handling
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://nv1189766_db_user:UPlUuYeGrJREQDn9@cluster0.rjbh1pj.mongodb.net/AT_Project?retryWrites=true&w=majority&appName=Cluster0';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/qrattendance';
 
 console.log('🔧 Attempting MongoDB connection...');
 console.log('📊 MongoDB URI:', MONGODB_URI ? 'Provided' : 'Using default');
