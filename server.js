@@ -10,6 +10,7 @@ const app = express();
 // ✅ Enhanced CORS configuration for production
 const allowedOrigins = [
   'http://localhost:3000',
+  'https://versel-frontend-tau.vercel.app',
   'https://versel-frontend.vercel.app'
 ];
 
